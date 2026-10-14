@@ -1,0 +1,58 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin · VIP</title><link rel="icon" type="image/png" href="../img/favicon.png"><meta name="robots" content="noindex">
+<link rel="stylesheet" href="../css/site.css"><script src="../js/common.js"></script>
+<style>.tabs{display:flex;gap:6px;padding:10px 16px;background:#fff;position:sticky;top:70px;z-index:5}.tabs button{flex:1;padding:10px;border:1px solid #ccc;background:#fff;border-radius:6px}.tabs .on{background:var(--grafite);color:#fff}
+.funil{display:flex;gap:6px;overflow-x:auto;margin-bottom:12px}.funil span{flex:none;background:#fff;padding:6px 10px;border-radius:16px;font-size:13px;border:1px solid #ddd}
+.lead{background:#fff;border-radius:8px;padding:12px;margin-bottom:10px}.pago{background:#C9A227;color:#111;font-size:11px;padding:2px 6px;border-radius:4px;font-weight:700}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.wpp{display:none}.aviso{background:#fff3cd;padding:8px 16px;font-size:13px}</style></head><body style="padding-top:92px">
+<div class="aviso">Área interna (sem login nesta versão). Dados salvos neste navegador (localStorage).</div>
+<div class="tabs"><button class="on" data-t="leads">Leads / CRM</button><button data-t="imoveis">Imóveis</button><button data-t="dados">Dados</button></div>
+<section id="leads"><h2>Leads</h2><div class="funil" id="funil"></div>
+<select id="fEtapa"><option value="">Todas as etapas</option></select>
+<details style="margin:12px 0"><summary class="btn dark">+ Cadastrar lead manual</summary>
+<form id="manual" style="margin-top:12px"><input name="nome" placeholder="Nome" required><input name="telefone" placeholder="Telefone/WhatsApp"><input name="email" placeholder="E-mail">
+<select name="canal_entrada"><option value="whatsapp">WhatsApp direto</option><option value="telefone">Ligação</option><option value="indicacao">Indicação</option><option value="corretor">Corretor parceiro</option><option value="presencial">Presencial</option></select>
+<select name="interesse"><option>Comprar pronto</option><option>Construir</option><option>Só conhecer</option><option>Vender meu imóvel</option><option>Consultoria / avaliação técnica</option><option>Manutenção da minha casa</option></select><textarea name="mensagem" placeholder="Mensagem / observações"></textarea><div id="match" class="meta"></div><button class="btn">Salvar lead</button></form></details>
+<div id="lista"></div></section>
+<section id="imoveis" hidden><h2>Imóveis</h2><form id="fi"><input type="hidden" name="id"><input name="titulo" placeholder="Título" required>
+<div class="row"><select name="tipo"><option>Casa</option><option>Sobrado</option><option>Apartamento</option><option>Lote</option></select><select name="local"><option value="condominio">Condomínio</option><option value="rua">Rua</option></select></div>
+<input name="condominio" placeholder="Condomínio (ex.: Mirante do Lago)">
+<div class="row"><input name="area_averbada" type="number" step="0.1" placeholder="m² averbados"><input name="area_construida" type="number" step="0.1" placeholder="m² construídos"><input name="lote" type="number" step="0.1" placeholder="Lote m²"><input name="suites" type="number" placeholder="Suítes"><input name="quartos" type="number" placeholder="Quartos"><input name="vagas" type="number" placeholder="Vagas"></div>
+<select name="status"><option value="disponivel">Disponível</option><option value="reservado">Reservado</option><option value="vendido">Vendido</option></select>
+<label><input type="checkbox" name="destaque" style="width:auto"> Selo Destaque</label> <span class="meta">(status Vendido = selo VENDIDA)</span><label><input type="checkbox" name="premium" style="width:auto"> Modelo Premium (igual Casa Pitangueira); desmarcado = Padrão</label>
+<textarea name="fotos" placeholder="Fotos: um caminho/URL por linha (ex.: img/v7-f2-1x1.webp)"></textarea><textarea name="descricao" rows="4" placeholder="Descrição (sem preço)"></textarea>
+<p class="meta">Não há campo de preço: o site não mostra valores.</p><button class="btn">Salvar imóvel</button> <button type="button" class="btn out" style="color:#111;border-color:#111" onclick="fi.reset();fi.id.value=''">Novo</button></form><div id="li" style="margin-top:16px"></div></section>
+<section id="dados" hidden><h2>Exportar / importar</h2><p>Leads e imóveis em JSON (backup ou envio para a API <code>/api/leads</code>).</p>
+<button class="btn dark" onclick="exp()">Exportar JSON</button><p><label>Importar JSON <input type="file" id="imp" accept=".json"></label></p>
+<p class="meta">Visitas importadas (com telefone/e-mail): <span id="nv"></span></p><button class="btn out" style="color:#111;border-color:#111" onclick="if(confirm('Restaurar imóveis do data/imoveis.json?')){localStorage.removeItem('vip_imoveis');location.reload()}">Recarregar imóveis do JSON</button></section>
+<script>
+const ETAPAS=['Novo','Contato feito','Qualificado','Visita agendada','Proposta','Fechado (ganho)','Perdido'];
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));['leads','imoveis','dados'].forEach(id=>document.getElementById(id).hidden=id!==b.dataset.t)});
+fEtapa.innerHTML+=ETAPAS.map(e=>`<option>${e}</option>`).join('');fEtapa.onchange=renderLeads;
+const origTxt=o=>{const p=o?.paid,f=o?.first||{};const s=p||f;return (o?.veio_de_publicidade||p?'<span class="pago">ANÚNCIO</span> ':'')+[s.utm_source,s.utm_medium,s.utm_campaign].filter(Boolean).join(' / ')+(s.gclid?' gclid':'')+(s.fbclid?' fbclid':'')||'direto/orgânico'};
+function renderLeads(){const L=getLeads();funil.innerHTML=ETAPAS.map(e=>`<span>${e}: ${L.filter(l=>l.etapa===e).length}</span>`).join('');
+ lista.innerHTML=L.filter(l=>!fEtapa.value||l.etapa===fEtapa.value).sort((a,b)=>b.criado.localeCompare(a.criado)).map(l=>`<div class="lead"><b>${l.nome}</b> <span class="meta">${l.telefone||''} ${l.email||''}</span><br><span class="meta">${l.interesse||''} ${l.imovel?'· '+l.imovel:''} · ${l.via||l.canal_entrada||''}</span><br>${l.mensagem?`<div style="background:#f6f3ec;padding:6px;border-radius:4px;margin:4px 0">💬 ${l.mensagem.replace(/</g,'&lt;')}</div>`:''}Origem: ${origTxt(l.origem)}<br>
+ <select onchange="mudaEtapa('${l.id}',this.value)">${ETAPAS.map(e=>`<option ${e===l.etapa?'selected':''}>${e}</option>`).join('')}</select>
+ <details><summary class="meta">Histórico (${l.historico.length})</summary>${l.historico.map(h=>`<div class="meta">${new Date(h.ts).toLocaleString('pt-BR')} – ${h.txt}</div>`).join('')}<input placeholder="Anotar follow-up e Enter" onkeydown="if(event.key==='Enter'){nota('${l.id}',this.value)}"></details></div>`).join('')||'<p class="meta">Nenhum lead ainda.</p>'}
+function mudaEtapa(id,e){const L=getLeads(),l=L.find(x=>x.id===id);l.historico.push({ts:new Date().toISOString(),txt:'Etapa: '+l.etapa+' → '+e});l.etapa=e;setLeads(L);renderLeads()}
+function nota(id,t){const L=getLeads();L.find(x=>x.id===id).historico.push({ts:new Date().toISOString(),txt:t});setLeads(L);renderLeads()}
+// Casamento por telefone/e-mail com leads e visitas anteriores (ligação da origem)
+function acharOrigem(tel,mail){tel=normTel(tel);mail=normMail(mail);
+ const l=getLeads().find(x=>(tel&&normTel(x.telefone)===tel)||(mail&&normMail(x.email)===mail));
+ if(l)return {lead:l,origem:l.origem};
+ // visitas com identificador (ex.: tracking.js registrando telefone/e-mail digitado, ou importadas)
+ const v=LS.get('vip_visits',[]).find(x=>(tel&&normTel(x.telefone)===tel)||(mail&&normMail(x.email)===mail));
+ return v?{origem:{vid:v.vid,first:v,paid:isPaidTouch(v)?v:null,veio_de_publicidade:isPaidTouch(v)}}:null}
+manual.oninput=()=>{const m=acharOrigem(manual.telefone.value,manual.email.value);match.innerHTML=m?('✔ Já conhecido'+(m.lead?' (lead '+m.lead.nome+')':'')+' – origem: '+origTxt(m.origem)+'. A origem será mantida.'):''};
+manual.onsubmit=e=>{e.preventDefault();const d=Object.fromEntries(new FormData(manual));d.via='manual: '+d.canal_entrada;d.site='vip';const m=acharOrigem(d.telefone,d.email);
+ const org=m?.origem||{first:{canal:d.canal_entrada,ts:new Date().toISOString()},paid:null};upsertLead(d,org);manual.reset();match.innerHTML='';renderLeads()};
+// Imóveis
+async function renderIm(){const l=await getImoveis();li.innerHTML=l.map(i=>`<div class="lead"><b>${i.titulo}</b> <span class="meta">${i.status}${i.premium?' · premium':''}</span><br><button onclick="editar('${i.id}')">Editar</button> <a href="../${i.premium?'casa-pitangueira.html':'imovel.html?id='+i.id}" target="_blank">ver página</a> <button onclick="remover('${i.id}')">Remover</button></div>`).join('')}
+async function editar(id){const i=(await getImoveis()).find(x=>x.id===id);for(const k in i){const el=fi.elements[k];if(!el)continue;if(el.type==='checkbox')el.checked=!!i[k];else el.value=k==='fotos'?i.fotos.join('\n'):i[k]}scrollTo(0,0)}
+async function remover(id){if(!confirm('Remover?'))return;LS.set('vip_imoveis_v','2026-10-14b'),LS.set('vip_imoveis',(await getImoveis()).filter(x=>x.id!==id));renderIm()}
+fi.onsubmit=async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(fi));['area_averbada','area_construida','lote','suites','quartos','vagas'].forEach(k=>d[k]=d[k]?+d[k]:null);d.destaque=fi.destaque.checked;d.premium=fi.premium.checked;d.fotos=(d.fotos||'').split('\n').map(s=>s.trim()).filter(Boolean);
+ d.id=d.id||d.titulo.toLowerCase().normalize('NFD').replace(/[^\w]+/g,'-').replace(/^-|-$/g,'');const l=await getImoveis(),ix=l.findIndex(x=>x.id===d.id);ix>=0?l[ix]=d:l.push(d);LS.set('vip_imoveis_v','2026-10-14b'),LS.set('vip_imoveis',l);fi.reset();fi.id.value='';renderIm()};
+// Export/import
+async function exp(){const b=new Blob([JSON.stringify({exportado:new Date().toISOString(),leads:getLeads(),imoveis:await getImoveis(),visitas:LS.get('vip_visits',[])},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='vip-dados.json';a.click()}
+imp.onchange=async()=>{const j=JSON.parse(await imp.files[0].text());if(j.imoveis)LS.set('vip_imoveis_v','2026-10-14b'),LS.set('vip_imoveis',j.imoveis);(j.leads||[]).forEach(x=>{if(!x.historico){leadFromContract(x);return}const L=getLeads();const e=L.find(y=>y.id===x.id||(x.telefone&&normTel(y.telefone)===normTel(x.telefone)));if(e){e.origem=mergeOrigem(e.origem,x.origem);e.historico=[...e.historico,...(x.historico||[])];setLeads(L)}else{L.push(x);setLeads(L)}});if(j.visitas)LS.set('vip_visits',[...LS.get('vip_visits',[]),...j.visitas]);alert('Importado');renderLeads();renderIm()};
+nv.textContent=LS.get('vip_visits',[]).length;renderLeads();renderIm();
+</script></body></html>
